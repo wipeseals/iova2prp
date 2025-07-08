@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IOVA to PRP Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+        }
+        .hex {
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-weight: 500;
+        }
+        .input-range::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #3b82f6;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .input-range::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #3b82f6;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        pre code {
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+        }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">IOVA to PRP Calculator</h1>
+            <p class="mt-2 text-lg text-gray-600">VFIO環境におけるIOVAからNVMe PRPへの変換を可視化します</p>
+            <a href="https://github.com/wipesaels/iova2prp" target="_blank" rel="noopener noreferrer" class="mt-4 inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors">
+                <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.168 6.839 9.492.5.092.682-.217.682-.482 0-.237-.009-.868-.014-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.031-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.378.203 2.398.1 2.651.64.7 1.03 1.595 1.03 2.688 0 3.848-2.338 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.001 10.001 0 0022 12c0-5.523-4.477-10-10-10z" clip-rule="evenodd" /></svg>
+                GitHub Repository
+            </a>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- ===== コントロールパネル ===== -->
+            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg border border-gray-200 self-start">
+                <h2 class="text-2xl font-bold mb-6 border-b pb-3">パラメータ設定</h2>
+                <div class="space-y-6">
+                    <div>
+                        <label for="pageSize" class="block text-sm font-medium text-gray-700">ページサイズ (Bytes)</label>
+                        <input type="number" id="pageSize" value="4096" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2">
+                    </div>
+                    <div>
+                        <label for="iovaStart" class="block text-sm font-medium text-gray-700">IOVA 開始アドレス</label>
+                        <input type="range" id="iovaStart" min="0" max="65536" step="1" value="2048" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer input-range">
+                        <div class="text-right text-sm text-gray-500 mt-1">現在値: <span id="iovaStartValue" class="font-semibold hex text-blue-600"></span></div>
+                    </div>
+                    <div>
+                        <label for="transferSize" class="block text-sm font-medium text-gray-700">転送サイズ (Bytes)</label>
+                        <input type="range" id="transferSize" min="1" max="65536" step="1" value="6144" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer input-range">
+                        <div class="text-right text-sm text-gray-500 mt-1">現在値: <span id="transferSizeValue" class="font-semibold text-blue-600"></span></div>
+                    </div>
+                     <div>
+                        <label for="prpListBase" class="block text-sm font-medium text-gray-700">PRPリストのベースIOVA</label>
+                        <input type="range" id="prpListBase" min="1048576" max="4194304" step="4096" value="1048576" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer input-range">
+                         <div class="text-right text-sm text-gray-500 mt-1">現在値: <span id="prpListBaseHex" class="font-semibold hex text-blue-600"></span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 結果表示 ===== -->
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                <h2 class="text-2xl font-bold mb-6 border-b pb-3">計算結果</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                        <h3 class="font-semibold text-blue-800">PRP 1</h3>
+                        <p id="prp1Value" class="text-2xl hex text-blue-900 mt-1">0x0</p>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+                        <h3 class="font-semibold text-green-800">PRP 2</h3>
+                        <p id="prp2Value" class="text-2xl hex text-green-900 mt-1">0x0</p>
+                    </div>
+                </div>
+                <div id="explanation" class="bg-gray-100 p-4 rounded-lg text-gray-700 border border-gray-200"></div>
+                
+                <div class="space-y-4 mt-6">
+                    <!-- PRP1/PRP2の役割 (折り畳み) -->
+                    <div x-data="{ open: true }" class="bg-gray-100 rounded-lg border border-gray-200">
+                        <button @click="open = !open" class="w-full flex justify-between items-center p-4">
+                            <h3 class="text-xl font-bold">PRP1 & PRP2 の役割</h3>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 transform transition-transform" :class="{'rotate-180': open}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                        <div x-show="open" x-cloak x-transition class="p-4 pt-0">
+                            <div class="space-y-3 text-sm">
+                                <p><strong class="font-semibold text-blue-800">PRP1:</strong> 常にデータ転送の<strong class="font-semibold">開始IOVA</strong>を指します。ページ境界にアラインしていない、つまりページ内オフセットを持つことができるのは、このPRP1だけです。</p>
+                                <p><strong class="font-semibold text-green-800">PRP2:</strong> 転送サイズに応じて役割が変化する、柔軟なフィールドです。</p>
+                                <ul class="list-disc list-inside pl-4 space-y-1 text-gray-800">
+                                    <li><strong class="text-gray-700">1ページで完結する場合:</strong> データはPRP1が指すページ内に全て収まるため、PRP2は使用されず <span class="hex">0x0</span> になります。</li>
+                                    <li><strong class="text-gray-700">2ページに収まる場合:</strong> 2ページ目のデータ開始IOVAを<strong class="font-semibold">直接</strong>指します。</li>
+                                    <li><strong class="text-gray-700">3ページ以上にまたがる場合:</strong> データそのものではなく、2ページ目以降のIOVAを列挙した<strong class="font-semibold">「PRPリスト」の開始IOVA</strong>を指すポインタになります。</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- コード例 (折り畳み) -->
+                    <div x-data="{ open: true }" class="bg-gray-100 rounded-lg border border-gray-200">
+                         <button @click="open = !open" class="w-full flex justify-between items-center p-4">
+                            <h3 class="text-xl font-bold">計算ロジックのコード例</h3>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 transform transition-transform" :class="{'rotate-180': open}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                        <div x-show="open" x-cloak x-transition class="p-4 pt-0" x-data="{ tab: 'c' }">
+                            <div class="border-b border-gray-200">
+                                <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+                                    <button @click="tab = 'c'" :class="{ 'border-blue-500 text-blue-600': tab === 'c', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300': tab !== 'c' }" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">C</button>
+                                    <button @click="tab = 'python'" :class="{ 'border-blue-500 text-blue-600': tab === 'python', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300': tab !== 'python' }" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Python</button>
+                                    <button @click="tab = 'javascript'" :class="{ 'border-blue-500 text-blue-600': tab === 'javascript', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300': tab !== 'javascript' }" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">JavaScript</button>
+                                    <button @click="tab = 'zig'" :class="{ 'border-blue-500 text-blue-600': tab === 'zig', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300': tab !== 'zig' }" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">Zig</button>
+                                </nav>
+                            </div>
+                            <div class="mt-4">
+                                <div x-show="tab === 'c'" class="bg-gray-800 text-white p-4 rounded-lg overflow-x-auto"><pre><code id="code-c" class="language-c"></code></pre></div>
+                                <div x-show="tab === 'python'" x-cloak class="bg-gray-800 text-white p-4 rounded-lg overflow-x-auto"><pre><code id="code-python" class="language-python"></code></pre></div>
+                                <div x-show="tab === 'javascript'" x-cloak class="bg-gray-800 text-white p-4 rounded-lg overflow-x-auto"><pre><code id="code-javascript" class="language-js"></code></pre></div>
+                                <div x-show="tab === 'zig'" x-cloak class="bg-gray-800 text-white p-4 rounded-lg overflow-x-auto"><pre><code id="code-zig" class="language-zig"></code></pre></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="prpListContainer" class="mt-6 hidden">
+                    <h3 class="text-xl font-bold mb-3">PRP List の内容</h3>
+                    <div class="bg-gray-100 p-4 rounded-lg max-h-60 overflow-y-auto border border-gray-200">
+                        <table class="min-w-full divide-y divide-gray-300">
+                            <thead class="bg-gray-200">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-700">Index</th>
+                                    <th class="px-4 py-2 text-left text-sm font-semibold text-gray-700">IOVA (Hex)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="prpListBody" class="bg-white divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== メモリ可視化 ===== -->
+        <div class="mt-8 bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+            <h2 class="text-2xl font-bold mb-6">メモリレイアウトの可視化</h2>
+            <div id="memory-visualization" class="w-full overflow-x-auto p-4 bg-gray-50 rounded-lg">
+                <div class="flex space-x-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM要素の取得
+        const pageSizeInput = document.getElementById('pageSize');
+        const iovaStartInput = document.getElementById('iovaStart');
+        const transferSizeInput = document.getElementById('transferSize');
+        const prpListBaseInput = document.getElementById('prpListBase');
+        const iovaStartValue = document.getElementById('iovaStartValue');
+        const transferSizeValue = document.getElementById('transferSizeValue');
+        const prpListBaseHex = document.getElementById('prpListBaseHex');
+        const prp1Value = document.getElementById('prp1Value');
+        const prp2Value = document.getElementById('prp2Value');
+        const explanation = document.getElementById('explanation');
+        const prpListContainer = document.getElementById('prpListContainer');
+        const prpListBody = document.getElementById('prpListBody');
+        const memoryVisualization = document.getElementById('memory-visualization').querySelector('.flex');
+        const codePython = document.getElementById('code-python');
+        const codeJavascript = document.getElementById('code-javascript');
+        const codeC = document.getElementById('code-c');
+        const codeZig = document.getElementById('code-zig');
+
+        const toHex = (d) => '0x' + (d).toString(16).toUpperCase();
+
+        function generateCodeSnippets(params) {
+            const { iovaStart, transferSize, pageSize, prpListBase, prp1, prp2, prpList } = params;
+
+            const cCode = `
+#include <stdio.h>
+#include <stdint.h>
+
+#define PAGE_SIZE ${pageSize}
+
+void calculate_prp_example() {
+    // 入力パラメータ
+    uint64_t iova_start = ${iovaStart}ULL; /* ${toHex(iovaStart)} */
+    uint32_t transfer_size = ${transferSize}U;
+    uint64_t prp_list_base_iova = ${prpListBase}ULL; /* ${toHex(prpListBase)} */
+
+    // 計算ロジック
+    uint64_t prp1 = iova_start;
+    uint64_t prp2 = 0;
+    /* uint64_t prp_list[...]; // PRPリストは別途確保・設定 */
+
+    uint64_t offset = iova_start % PAGE_SIZE;
+    uint32_t size_in_first_page = PAGE_SIZE - offset;
+
+    if (transfer_size > size_in_first_page) {
+        uint32_t remaining_size = transfer_size - size_in_first_page;
+        uint64_t next_data_iova = iova_start + size_in_first_page;
+
+        if (remaining_size <= PAGE_SIZE) {
+            // ケースB: 2ページに収まる
+            prp2 = next_data_iova;
+        } else {
+            // ケースC: PRPリストが必要
+            prp2 = prp_list_base_iova;
+            /* ここでprp_listを埋める処理が必要 */
+        }
+    }
+
+    // --- 計算結果 ---
+    // prp1 = ${toHex(prp1)}
+    // prp2 = ${toHex(prp2)}
+    printf("prp1 = 0x%lX\\n", prp1);
+    printf("prp2 = 0x%lX\\n", prp2);
+}`;
+
+            const pythonCode = `
+# 入力パラメータ
+PAGE_SIZE = ${pageSize}
+iova_start = ${iovaStart}  # ${toHex(iovaStart)}
+transfer_size = ${transferSize}
+prp_list_base_iova = ${prpListBase}  # ${toHex(prpListBase)}
+
+# 計算ロジック
+prp1 = iova_start
+prp2 = 0
+prp_list = []
+
+offset = iova_start % PAGE_SIZE
+size_in_first_page = PAGE_SIZE - offset
+
+if transfer_size > size_in_first_page:
+    remaining_size = transfer_size - size_in_first_page
+    # 2ページ目のデータ開始IOVA
+    next_data_iova = iova_start + size_in_first_page
+    
+    if remaining_size <= PAGE_SIZE:
+        # ケースB: 2ページに収まる
+        prp2 = next_data_iova
+    else:
+        # ケースC: PRPリストが必要
+        prp2 = prp_list_base_iova
+        
+        bytes_accounted = 0
+        current_iova = next_data_iova
+        while bytes_accounted < remaining_size:
+            prp_list.append(current_iova)
+            # 簡略化のため、後続ページは連続していると仮定
+            current_page_base = (current_iova // PAGE_SIZE) * PAGE_SIZE
+            current_iova = current_page_base + PAGE_SIZE
+            bytes_accounted += PAGE_SIZE
+
+# --- 計算結果 ---
+# prp1 = ${toHex(prp1)}
+# prp2 = ${toHex(prp2)}
+# prp_list = [${prpList.map(p => toHex(p)).join(', ')}]`;
+
+            const jsCode = `
+// 入力パラメータ
+const PAGE_SIZE = ${pageSize};
+const iovaStart = ${iovaStart}; // ${toHex(iovaStart)}
+const transferSize = ${transferSize};
+const prpListBaseIova = ${prpListBase}; // ${toHex(prpListBase)}
+
+// 計算ロジック
+let prp1 = iovaStart;
+let prp2 = 0;
+const prpList = [];
+
+const offset = iovaStart % PAGE_SIZE;
+const sizeInFirstPage = PAGE_SIZE - offset;
+
+if (transferSize > sizeInFirstPage) {
+    const remainingSize = transferSize - sizeInFirstPage;
+    // 2ページ目のデータ開始IOVA
+    const nextDataIova = iovaStart + sizeInFirstPage;
+
+    if (remainingSize <= PAGE_SIZE) {
+        // ケースB: 2ページに収まる
+        prp2 = nextDataIova;
+    } else {
+        // ケースC: PRPリストが必要
+        prp2 = prpListBaseIova;
+
+        let bytesAccounted = 0;
+        let currentIova = nextDataIova;
+        while (bytesAccounted < remainingSize) {
+            prpList.push(currentIova);
+            // 簡略化のため、後続ページは連続していると仮定
+            const currentPageBase = Math.floor(currentIova / PAGE_SIZE) * PAGE_SIZE;
+            currentIova = currentPageBase + PAGE_SIZE;
+            bytesAccounted += PAGE_SIZE;
+        }
+    }
+}
+
+// --- 計算結果 ---
+// prp1 = "${toHex(prp1)}";
+// prp2 = "${toHex(prp2)}";
+// prpList = [${prpList.map(p => `"${toHex(p)}"`).join(', ')}];`;
+
+            const zigCode = `
+const std = @import("std");
+
+// 入力パラメータ
+const PAGE_SIZE: u64 = ${pageSize};
+const iova_start: u64 = ${iovaStart}; // ${toHex(iovaStart)}
+const transfer_size: u32 = ${transferSize};
+const prp_list_base_iova: u64 = ${prpListBase}; // ${toHex(prpListBase)}
+
+pub fn calculate_prp_example(allocator: std.mem.Allocator) !void {
+    // 計算ロジック
+    var prp1 = iova_start;
+    var prp2: u64 = 0;
+    var prp_list = std.ArrayList(u64).init(allocator);
+    defer prp_list.deinit();
+
+    const offset = iova_start % PAGE_SIZE;
+    const size_in_first_page = PAGE_SIZE - offset;
+
+    if (transfer_size > size_in_first_page) {
+        const remaining_size = transfer_size - @as(u32, @intCast(size_in_first_page));
+        const next_data_iova = iova_start + size_in_first_page;
+
+        if (remaining_size <= PAGE_SIZE) {
+            // ケースB: 2ページに収まる
+            prp2 = next_data_iova;
+        } else {
+            // ケースC: PRPリストが必要
+            prp2 = prp_list_base_iova;
+
+            var bytes_accounted: u32 = 0;
+            var current_iova = next_data_iova;
+            while (bytes_accounted < remaining_size) {
+                try prp_list.append(current_iova);
+                const current_page_base = @divTrunc(current_iova, PAGE_SIZE) * PAGE_SIZE;
+                current_iova = current_page_base + PAGE_SIZE;
+                bytes_accounted += @as(u32, @intCast(PAGE_SIZE));
+            }
+        }
+    }
+    
+    // --- 計算結果 ---
+    // prp1 = ${toHex(prp1)}
+    // prp2 = ${toHex(prp2)}
+    std.debug.print("prp1 = 0x{X}\\n", .{prp1});
+    std.debug.print("prp2 = 0x{X}\\n", .{prp2});
+}
+`;
+
+            return { cCode, pythonCode, jsCode, zigCode };
+        }
+
+        function update() {
+            const pageSize = parseInt(pageSizeInput.value, 10) || 4096;
+            const iovaStart = parseInt(iovaStartInput.value, 10);
+            const transferSize = parseInt(transferSizeInput.value, 10);
+            const prpListBase = parseInt(prpListBaseInput.value, 10);
+
+            iovaStartValue.textContent = toHex(iovaStart);
+            transferSizeValue.textContent = transferSize.toString();
+            prpListBaseHex.textContent = toHex(prpListBase);
+
+            let prp1 = iovaStart;
+            let prp2 = 0;
+            const prpList = [];
+            
+            const offsetInFirstPage = iovaStart % pageSize;
+            const sizeInFirstPage = pageSize - offsetInFirstPage;
+
+            if (transferSize <= sizeInFirstPage) {
+                prp2 = 0;
+                explanation.innerHTML = `<p><strong class="font-semibold">ケースA:</strong> 転送データ (${transferSize} B) は最初のページ内に収まります。</p><p>そのため、<strong class="text-green-700">PRP2</strong> は 0 に設定されます。</p>`;
+                prpListContainer.classList.add('hidden');
+            } else {
+                const remainingSize = transferSize - sizeInFirstPage;
+                const nextDataIova = iovaStart + sizeInFirstPage;
+
+                if (remainingSize <= pageSize) {
+                    prp2 = nextDataIova; 
+                    explanation.innerHTML = `<p><strong class="font-semibold">ケースB:</strong> 転送データ (${transferSize} B) は2ページにまたがります。</p><p><strong class="text-green-700">PRP2</strong> は2ページ目のデータ開始IOVA (<span class="hex">${toHex(prp2)}</span>) を直接指します。</p>`;
+                    prpListContainer.classList.add('hidden');
+                } else {
+                    prp2 = prpListBase;
+                    explanation.innerHTML = `<p><strong class="font-semibold">ケースC:</strong> 転送データ (${transferSize} B) は3ページ以上にまたがります。</p><p><strong class="text-green-700">PRP2</strong> はデータ自体ではなく、PRPエントリのリスト（PRP List）の開始IOVA (<span class="hex">${toHex(prp2)}</span>) を指します。</p>`;
+                    prpListContainer.classList.remove('hidden');
+
+                    let bytesAccountedFor = 0;
+                    let currentIova = nextDataIova;
+                    while(bytesAccountedFor < remainingSize) {
+                        prpList.push(currentIova);
+                        const currentPageBase = Math.floor(currentIova / pageSize) * pageSize;
+                        currentIova = currentPageBase + pageSize;
+                        bytesAccountedFor += pageSize;
+                    }
+                }
+            }
+            
+            prp1Value.textContent = toHex(prp1);
+            prp2Value.textContent = toHex(prp2);
+            
+            prpListBody.innerHTML = '';
+            prpList.forEach((entry, index) => {
+                const row = `<tr>
+                    <td class="px-4 py-2 text-sm text-gray-600">${index}</td>
+                    <td class="px-4 py-2 text-sm hex text-gray-800">${toHex(entry)}</td>
+                </tr>`;
+                prpListBody.innerHTML += row;
+            });
+
+            const codeSnippets = generateCodeSnippets({
+                iovaStart, transferSize, pageSize, prpListBase, prp1, prp2, prpList
+            });
+            codeC.textContent = codeSnippets.cCode.trim();
+            codePython.textContent = codeSnippets.pythonCode.trim();
+            codeJavascript.textContent = codeSnippets.jsCode.trim();
+            codeZig.textContent = codeSnippets.zigCode.trim();
+
+            visualizeMemory(pageSize, iovaStart, transferSize);
+        }
+
+        function visualizeMemory(pageSize, iovaStart, transferSize) {
+            memoryVisualization.innerHTML = '';
+            const startPage = Math.floor(iovaStart / pageSize);
+            const endAddress = iovaStart + transferSize -1;
+            const endPage = Math.floor(endAddress / pageSize);
+            const numPagesToShow = Math.max(12, endPage - startPage + 4);
+
+            for (let i = Math.max(0, startPage - 2); i < startPage + numPagesToShow; i++) {
+                const pageBase = i * pageSize;
+                const pageEnd = pageBase + pageSize - 1;
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'flex-shrink-0 w-48 h-64 bg-white border-2 border-gray-300 rounded-lg p-2 flex flex-col relative';
+                pageDiv.innerHTML = `<div class="text-center border-b pb-1 mb-2">
+                                        <p class="text-sm font-bold text-gray-700">Page ${i}</p>
+                                        <p class="text-xs hex text-gray-500">${toHex(pageBase)}</p>
+                                     </div>`;
+
+                if (iovaStart <= pageEnd && endAddress >= pageBase) {
+                    const dataStartInPage = Math.max(iovaStart, pageBase);
+                    const dataEndInPage = Math.min(endAddress, pageEnd);
+                    const topPercent = ((dataStartInPage % pageSize) / pageSize) * 100;
+                    const heightPercent = ((dataEndInPage - dataStartInPage + 1) / pageSize) * 100;
+                    const dataBlock = document.createElement('div');
+                    dataBlock.className = 'absolute bg-blue-500 bg-opacity-70 border border-blue-700 rounded';
+                    dataBlock.style.left = '8px';
+                    dataBlock.style.right = '8px';
+                    dataBlock.style.top = `calc(2.75rem + ${topPercent}%)`;
+                    dataBlock.style.height = `${heightPercent}%`;
+                    
+                    if (i === startPage) {
+                        dataBlock.innerHTML = `<div class="absolute -left-2 transform -translate-x-full bg-blue-600 text-white text-xs px-2 py-1 rounded hex" style="top: 0;">${toHex(iovaStart)}</div>`;
+                    }
+                    pageDiv.appendChild(dataBlock);
+                }
+                memoryVisualization.appendChild(pageDiv);
+            }
+        }
+
+        [pageSizeInput, iovaStartInput, transferSizeInput, prpListBaseInput].forEach(input => {
+            input.addEventListener('input', update);
+        });
+        
+        update();
+    </script>
+</body>
+</html>
